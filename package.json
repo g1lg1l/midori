@@ -8,12 +8,19 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "check:rls": "node --env-file=.env scripts/check-rls.mjs"
+    "check:rls": "node --env-file=.env scripts/check-rls.mjs",
+    "types": "supabase gen types typescript --linked > src/database.types.ts",
+    "check": "node scripts/check-text.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
+    "@tailwindcss/vite": "^4.3.3",
+    "lucide-react": "^1.51.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

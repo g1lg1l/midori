@@ -1,111 +1,207 @@
+@import "tailwindcss";
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
-
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
-
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
+  --paper: #edf2ec;
+  --well: #e1e9e0;
+  --sheet: #ffffff;
+  --raised: #f4f7f3;
+  --ink: #13291f;
+  --mute: #5b7064;
+  --line: #d3dcd2;
+  --primary: #1c4532;
+  --on-primary: #f2f7f0;
+  --brand: #4e9a2f;
+  --marker: #ffe27a;
+  --on-marker: #3a2f00;
+  --danger: #b5371f;
+  /* column tints */
+  --c-mint: #d6ecd2;
+  --c-sky: #d5e6f4;
+  --c-peach: #fadfcb;
+  --c-lilac: #e4dbf7;
+  --c-lemon: #f4eab8;
+  --c-rose: #f7d8e0;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+    --paper: #0f1b16;
+    --well: #13231c;
+    --sheet: #1a2b23;
+    --raised: #213429;
+    --ink: #e3ede5;
+    --mute: #93a99b;
+    --line: #2b4035;
+    --primary: #a3d16b;
+    --on-primary: #10200f;
+    --brand: #a3d16b;
+    --marker: #5a4a10;
+    --on-marker: #ffe89a;
+    --danger: #f08a73;
+    --c-mint: #1a3326;
+    --c-sky: #172b3b;
+    --c-peach: #3a281b;
+    --c-lilac: #2a2340;
+    --c-lemon: #34301a;
+    --c-rose: #3a2029;
+    color-scheme: dark;
   }
 }
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-well: var(--well);
+  --color-sheet: var(--sheet);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-mute: var(--mute);
+  --color-line: var(--line);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-brand: var(--brand);
+  --color-marker: var(--marker);
+  --color-on-marker: var(--on-marker);
+  --color-danger: var(--danger);
+  --font-sans: "Figtree", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Unbounded", "Figtree", ui-sans-serif, sans-serif;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+  button:not(:disabled) {
+    cursor: pointer;
   }
 }
-p {
-  margin: 0;
-}
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
+/* rendered markdown in task details (preflight strips list and heading styles) */
+.md {
   font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.md > * + * {
+  margin-top: 0.6em;
+}
+.md h1,
+.md h2,
+.md h3 {
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 1em;
+}
+.md > :first-child {
+  margin-top: 0;
+}
+.md h1 {
+  font-size: 1.3em;
+}
+.md h2 {
+  font-size: 1.15em;
+}
+.md ul {
+  list-style: disc;
+  padding-left: 1.3em;
+}
+.md ol {
+  list-style: decimal;
+  padding-left: 1.4em;
+}
+.md li + li,
+.md li > ul,
+.md li > ol {
+  margin-top: 0.25em;
+}
+.md li.task-list-item {
+  list-style: none;
+  margin-left: -1.3em;
+}
+.md input[type="checkbox"] {
+  accent-color: var(--brand);
+  width: 1.1em;
+  height: 1.1em;
+  margin-right: 0.45em;
+  vertical-align: -0.18em;
+}
+.md li.task-list-item:has(> input:checked) {
+  color: var(--mute);
+  text-decoration: line-through;
+}
+.md a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md code {
+  font-size: 0.9em;
+  background: var(--raised);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+}
+.md pre {
+  background: var(--raised);
+  padding: 0.8em 1em;
+  border-radius: 12px;
+  overflow-x: auto;
+}
+.md pre code {
+  background: none;
+  padding: 0;
+}
+.md blockquote {
+  border-left: 3px solid var(--line);
+  padding-left: 0.9em;
+  color: var(--mute);
+}
+.md img {
+  border-radius: 12px;
+  max-height: 320px;
+  max-width: 100%;
+}
+.md table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+.md th,
+.md td {
+  border: 1px solid var(--line);
+  padding: 0.3em 0.6em;
+}
+
+/* sheets slide up as they open; closing is instant */
+dialog.sheet {
+  transition: translate 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+}
+dialog.sheet::backdrop {
+  background: rgb(6 18 12 / 0.5);
+  transition: opacity 0.2s;
+}
+@starting-style {
+  dialog.sheet[open] {
+    translate: 0 48px;
+    opacity: 0;
+  }
+  dialog.sheet[open]::backdrop {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  dialog.sheet,
+  dialog.sheet::backdrop {
+    transition: none;
+  }
 }
