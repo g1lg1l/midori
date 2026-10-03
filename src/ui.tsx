@@ -1,3 +1,4 @@
+import { X } from 'lucide-react'
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { colorOf, initials, type Member } from './lib'
 
@@ -5,14 +6,18 @@ import { colorOf, initials, type Member } from './lib'
 export const fieldBare = 'w-full rounded-xl border border-line px-3.5 py-2.5 placeholder:text-mute/80 focus:border-brand focus:outline-none'
 export const field = `${fieldBare} bg-raised text-[15px]`
 export const pill =
-  'inline-flex items-center justify-center gap-2 rounded-full bg-primary text-on-primary font-semibold disabled:opacity-50 hover:opacity-90 transition-opacity'
+  'inline-flex items-center justify-center gap-2 rounded-full bg-primary text-on-primary font-semibold disabled:opacity-50 hover:opacity-90 active:scale-95 transition'
 export const btn = `${pill} h-11 px-5`
-const ghostBare = 'inline-flex items-center gap-1.5 rounded-full h-9 text-sm font-medium transition-colors'
+export const outline =
+  'inline-flex h-11 items-center justify-center gap-2 rounded-full border border-line px-5 font-semibold transition hover:bg-raised active:scale-95 disabled:opacity-50'
+const ghostBare = 'inline-flex items-center gap-1.5 rounded-full h-9 text-sm font-medium transition active:scale-95'
 export const ghost = `${ghostBare} px-3 text-mute hover:text-ink hover:bg-raised`
 export const link = `${ghostBare} justify-self-start text-mute hover:text-ink`
 export const danger = `${ghostBare} justify-self-start text-danger hover:opacity-75`
 export const iconBtn =
-  'inline-grid place-items-center size-9 shrink-0 rounded-full text-mute hover:text-ink hover:bg-raised transition-colors'
+  'inline-grid place-items-center size-9 shrink-0 rounded-full text-mute hover:text-ink hover:bg-raised active:scale-90 transition'
+
+export const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 
 export const Logo = ({ className = '' }: { className?: string }) => (
   <img src={`${import.meta.env.BASE_URL}favicon.svg`} alt="" className={className} />
@@ -22,7 +27,7 @@ export function Avatar({ member, size = 28 }: { member?: Member; size?: number }
   return (
     <span
       title={member?.name}
-      className="inline-grid place-items-center rounded-full font-semibold text-white shrink-0 select-none"
+      className="inline-grid shrink-0 place-items-center rounded-full font-semibold text-white select-none"
       style={{ width: size, height: size, fontSize: size * 0.42, background: member ? colorOf(member.user_id) : 'var(--mute)' }}
     >
       {member ? initials(member.name) : '?'}
@@ -31,23 +36,35 @@ export function Avatar({ member, size = 28 }: { member?: Member; size?: number }
 }
 
 // Native <dialog>: focus trap, Esc and the top layer for free. Mounting it opens it.
-export function Sheet({ label, onClose, children }: { label: string; onClose: () => void; children: ReactNode }) {
+// Fixed header and footer with dividers; only the middle scrolls, its scrollbar on the sheet's edge.
+export function Sheet({ label, header, footer, onClose, children }: { label: string; header: ReactNode; footer?: ReactNode; onClose: () => void; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     if (ref.current?.open) return
     ref.current?.showModal()
     ref.current?.focus() // start on the sheet itself, not its first button (no ring, no keyboard pop-up)
   }, [])
+  const close = () => ref.current?.close()
   return (
     <dialog
       ref={ref}
       aria-label={label}
       tabIndex={-1}
-      onClose={onClose}
-      onClick={(e) => e.target === e.currentTarget && ref.current?.close()}
-      className="sheet outline-none open:flex open:flex-col m-0 mt-auto w-full max-w-none max-h-[92dvh] rounded-t-[24px] bg-sheet text-ink p-0 sm:m-auto sm:w-[min(100%-2rem,36rem)] sm:max-h-[86dvh] sm:rounded-[24px]"
+      // the exit transition plays before the parent unmounts us
+      onClose={() => setTimeout(onClose, reducedMotion() ? 0 : 220)}
+      onClick={(e) => e.target === e.currentTarget && close()}
+      className="sheet m-0 mt-auto max-h-[92dvh] w-full max-w-none overflow-hidden rounded-t-[24px] bg-sheet p-0 text-ink outline-none open:flex open:flex-col sm:m-auto sm:max-h-[86dvh] sm:w-[min(100%-2rem,36rem)] sm:rounded-[24px]"
     >
-      {children}
+      <div className="flex shrink-0 items-center gap-1 border-b border-line py-2.5 pr-2.5 pl-5">
+        <div className="min-w-0 flex-1">{header}</div>
+        <button onClick={close} aria-label="Close" className={iconBtn}>
+          <X size={20} />
+        </button>
+      </div>
+      <div className={`min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pt-5 ${footer ? 'pb-5' : 'pb-[max(1.5rem,env(safe-area-inset-bottom))]'}`}>
+        {children}
+      </div>
+      {footer && <div className="shrink-0 border-t border-line">{footer}</div>}
     </dialog>
   )
 }
@@ -106,11 +123,34 @@ export function Toaster() {
       ref={ref}
       popover="manual"
       role="status"
-      className="m-0 inset-auto bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 max-w-[calc(100%-2rem)] rounded-full bg-primary text-on-primary px-4 py-2.5 text-sm font-medium shadow-lg border-0"
+      className="toast inset-x-0 top-[max(1rem,env(safe-area-inset-top))] bottom-auto mx-auto w-fit max-w-[calc(100%-2rem)] rounded-full border-0 bg-primary px-4 py-2.5 text-sm font-medium text-on-primary shadow-lg"
     >
       {message}
     </div>
   )
+}
+
+// A little emoji confetti pop at (x, y), drawn in the top layer above everything.
+export function burst(x: number, y: number, emoji: string) {
+  if (reducedMotion()) return
+  const host = document.createElement('div')
+  host.className = 'burst'
+  host.popover = 'manual'
+  host.style.left = `${x}px`
+  host.style.top = `${y}px`
+  for (let i = 0; i < 14; i++) {
+    const s = document.createElement('span')
+    s.textContent = i % 3 ? emoji : '✨'
+    const angle = (i / 14) * Math.PI * 2 + Math.random() * 0.4
+    const dist = 50 + Math.random() * 70
+    s.style.setProperty('--x', `${Math.cos(angle) * dist}px`)
+    s.style.setProperty('--y', `${Math.sin(angle) * dist - 30}px`)
+    s.style.setProperty('--r', `${Math.random() * 360 - 180}deg`)
+    host.append(s)
+  }
+  document.body.append(host)
+  host.showPopover()
+  setTimeout(() => host.remove(), 1000)
 }
 
 export function Toggle({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (on: boolean) => void }) {

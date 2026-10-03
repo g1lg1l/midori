@@ -4,7 +4,7 @@
 
 <p align="center">
   A small, friendly kanban board for making games with friends.<br>
-  Make a project, share the link, and everyone's in. No accounts.
+  Make a project, share the link, and everyone's in. No sign-up needed.
 </p>
 
 <p align="center"><b><a href="https://g1lg1l.github.io/midori/">Open Midori</a></b></p>
@@ -20,7 +20,8 @@
 
 ## What it does
 
-- **No accounts.** Every device gets its own anonymous identity the first time it opens Midori. Friends join a project from an invite link and pick a name.
+- **No sign-up needed.** Every device gets its own guest identity the first time it opens Midori. Friends join a project from an invite link and pick a name.
+- **Optional accounts.** Anyone can save a username and password, then sign in on another device and find the same projects, with the master role included. No email is involved.
 - **The master runs the board.** Whoever creates a project is its master. They can:
   - add, rename, reorder and delete columns, and give each one an emoji and a colour;
   - **lock** a column, so only the master can add, edit or move tasks in it (members can still comment);
@@ -31,7 +32,8 @@
 - **Tiny images.** Paste or pick an image in a task's details. It's shrunk to at most 800 px and 150 KB before upload, and the first image becomes the card's cover.
 - **@mentions** in comments, highlighted. A card's comment badge turns yellow when someone mentions you.
 - **Realtime.** Changes from the rest of the team show up as they happen.
-- **Mobile first.** Column tabs and swipe on phones, drag and drop on desktop, light and dark themes. It can be added to the home screen.
+- **Mobile first.** Column tabs and swipe on phones, drag and drop on desktop, light and dark themes.
+- **Installable.** On Android, tap Install on the home page. On iPhone, tap Share, then Add to Home Screen. Either way it opens full screen, like an app.
 
 <p align="center"><img src="docs/screenshots/board-dark.png" alt="The same board in dark mode"></p>
 
@@ -68,7 +70,7 @@ Then open http://localhost:5173/midori/. The app talks to the Supabase project s
    npx supabase login
    npx supabase link
    ```
-2. Apply the schema and turn on anonymous sign-ins (set `site_url` in [`supabase/config.toml`](supabase/config.toml) first):
+2. Apply the schema and the auth settings: anonymous sign-ins on, email confirmation off for username accounts. Set `site_url` in [`supabase/config.toml`](supabase/config.toml) first:
    ```bash
    npx supabase db push
    npx supabase config push
@@ -90,7 +92,8 @@ Every push to `main` builds and publishes to GitHub Pages via [`.github/workflow
 
 ## Good to know
 
-- **Your identity lives in the browser.** Clearing site data on a device means starting over there. If that device was the master, the project loses its master.
+- **Guests live in the browser.** Clearing site data on a guest device means starting over there, so masters should save an account.
+- **Usernames are stored as `name@example.com` logins.** That domain is reserved, so no mail is ever sent. Supabase just needs an email-shaped login.
 - **Images are public links.** They aren't listed anywhere, but anyone with the URL can see one.
 - **Deleting tasks keeps their images.** They're only removed when the whole project is deleted. Each project can hold at most 300 images.
 - **Don't auto-delete anonymous users** in Supabase: that would delete their projects too.

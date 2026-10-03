@@ -29,6 +29,24 @@ export function go(params: Record<string, string> = {}, replace = false) {
   dispatchEvent(new PopStateEvent('popstate'))
 }
 
+// Accounts are username + password. Supabase logins need an email, so the username becomes an alias
+// on example.com, a domain reserved for exactly this: no mail is ever sent or delivered there.
+const ALIAS = '@example.com'
+export const toEmail = (username: string) => username.trim().toLowerCase() + ALIAS
+export const usernameOf = (email = '') => (email.endsWith(ALIAS) ? email.slice(0, -ALIAS.length) : email)
+export const usernameRule = { pattern: '[A-Za-z0-9_.\\-]{3,24}', title: '3 to 24 letters, numbers, dots, dashes or underscores' }
+
+// Android and desktop Chrome offer an install prompt; keep it for the "Install" button. iOS uses Share > Add to Home Screen.
+type InstallPrompt = Event & { prompt: () => Promise<void> }
+export let installPrompt: InstallPrompt | null = null
+addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault()
+  installPrompt = e as InstallPrompt
+  dispatchEvent(new Event('installable'))
+})
+addEventListener('appinstalled', () => (installPrompt = null))
+export const clearInstallPrompt = () => (installPrompt = null)
+
 export const inviteUrl = (code: string) => `${location.origin}${import.meta.env.BASE_URL}?join=${code}`
 
 export const toast = (message: string) => dispatchEvent(new CustomEvent('toast', { detail: message }))
@@ -38,6 +56,10 @@ export function errorText(error: unknown) {
   if (code === '23505') return 'Someone in this project already uses that name. Pick another one.'
   if (code === '23514') return 'That text is empty or too long.'
   if (code === '42501') return "You don't have permission to do that."
+  if (code === 'email_exists' || code === 'user_already_exists') return 'That username is taken. Try another one.'
+  if (code === 'invalid_credentials') return 'Wrong username or password.'
+  if (code === 'weak_password') return 'Pick a longer password: at least 8 characters.'
+  if (code === 'over_request_rate_limit') return 'Too many tries. Wait a minute and try again.'
   if (/row-level security/i.test(message)) return 'Upload blocked. The project may have reached its 300 image limit.'
   if (/fetch|network/i.test(message)) return "Can't reach the server. Check your connection."
   return message || 'Something went wrong. Try again.'

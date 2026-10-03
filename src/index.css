@@ -85,6 +85,10 @@
   button:not(:disabled) {
     cursor: pointer;
   }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--mute) 45%, transparent) transparent;
+  }
 }
 
 /* rendered markdown in task details (preflight strips list and heading styles) */
@@ -182,26 +186,124 @@
   padding: 0.3em 0.6em;
 }
 
-/* sheets slide up as they open; closing is instant */
+/* sheets: slide up from the bottom on phones, rise and fade on desktop; both ways */
 dialog.sheet {
-  transition: translate 0.28s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s;
+  transition:
+    translate 0.3s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s,
+    display 0.3s allow-discrete,
+    overlay 0.3s allow-discrete;
+}
+dialog.sheet:not([open]) {
+  translate: 0 100%;
 }
 dialog.sheet::backdrop {
   background: rgb(6 18 12 / 0.5);
-  transition: opacity 0.2s;
+  transition:
+    opacity 0.25s,
+    display 0.3s allow-discrete,
+    overlay 0.3s allow-discrete;
+}
+dialog.sheet:not([open])::backdrop {
+  opacity: 0;
 }
 @starting-style {
   dialog.sheet[open] {
-    translate: 0 48px;
-    opacity: 0;
+    translate: 0 100%;
   }
   dialog.sheet[open]::backdrop {
     opacity: 0;
   }
 }
+@media (min-width: 40rem) {
+  dialog.sheet:not([open]) {
+    translate: 0 24px;
+    opacity: 0;
+  }
+  @starting-style {
+    dialog.sheet[open] {
+      translate: 0 24px;
+      opacity: 0;
+    }
+  }
+}
+
+.toast {
+  transition:
+    translate 0.25s cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 0.2s,
+    display 0.25s allow-discrete,
+    overlay 0.25s allow-discrete;
+}
+.toast:not(:popover-open) {
+  translate: 0 -12px;
+  opacity: 0;
+}
+@starting-style {
+  .toast:popover-open {
+    translate: 0 -12px;
+    opacity: 0;
+  }
+}
+
+/* new cards and ticked boxes pop */
+@keyframes pop {
+  from {
+    opacity: 0;
+    scale: 0.92;
+  }
+}
+.pop {
+  animation: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+.md input[type="checkbox"]:checked {
+  animation: pop 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.6);
+}
+
+/* emoji confetti (see burst() in ui.tsx) */
+.burst {
+  position: fixed;
+  inset: auto;
+  width: 0;
+  height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  overflow: visible;
+  pointer-events: none;
+}
+.burst span {
+  position: absolute;
+  font-size: 22px;
+  translate: -50% -50%;
+  animation: burst 0.9s cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+}
+@keyframes burst {
+  to {
+    translate: calc(-50% + var(--x)) calc(-50% + var(--y));
+    rotate: var(--r);
+    scale: 0.6;
+    opacity: 0;
+  }
+}
+
+/* a dropped card flies to its new spot; everything else just updates */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+}
+::view-transition-group(moving-card) {
+  animation-duration: 0.32s;
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 @media (prefers-reduced-motion: reduce) {
-  dialog.sheet,
-  dialog.sheet::backdrop {
-    transition: none;
+  *,
+  *::before,
+  *::after,
+  ::backdrop {
+    animation: none !important;
+    transition: none !important;
   }
 }

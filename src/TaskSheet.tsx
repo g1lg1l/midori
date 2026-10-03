@@ -1,4 +1,4 @@
-import { Bold, Check, ImagePlus, List, ListChecks, Lock, Pencil, Send, Trash2, X } from 'lucide-react'
+import { Bold, Check, ImagePlus, List, ListChecks, Lock, Pencil, Send, Trash2 } from 'lucide-react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -17,7 +17,7 @@ type Props = {
   isMaster: boolean
   onClose: () => void
   onUpdate: (change: Partial<Task>) => void
-  onMove: (columnId: string) => void
+  onMove: (columnId: string, at: { x: number; y: number }) => void
   onDelete: () => void
   onComment: (body: string) => void
   onDeleteComment: (comment: Comment) => void
@@ -29,7 +29,9 @@ export function TaskSheet(p: Props) {
   const member = (uid: string) => members.find((m) => m.user_id === uid)
   const author = member(task.created_by)
   const end = useRef<HTMLDivElement>(null)
+  const currentChip = useRef<HTMLButtonElement>(null)
   const seen = useRef(comments.length)
+  const [initial] = useState(() => new Set(comments.map((c) => c.id)))
 
   // follow the thread when a new comment arrives, but open at the top
   useEffect(() => {
@@ -37,100 +39,104 @@ export function TaskSheet(p: Props) {
     seen.current = comments.length
   }, [comments.length])
 
-  return (
-    <Sheet label={task.title} onClose={p.onClose}>
-      <div className="flex items-center gap-1 pt-3 pr-3 pl-5">
-        <div role="group" aria-label="Column" className="no-scrollbar flex flex-1 gap-1.5 overflow-x-auto py-1">
-          {columns.map((c) => {
-            const current = c.id === task.column_id
-            if (!canEdit && !current) return null
-            const allowed = current || p.canMoveTo(c)
-            return (
-              <button
-                key={c.id}
-                disabled={!canEdit || !allowed}
-                aria-pressed={current}
-                onClick={() => !current && p.onMove(c.id)}
-                title={allowed ? undefined : 'Locked by the master'}
-                className={`flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-semibold transition-colors disabled:opacity-50 ${current ? 'bg-primary text-on-primary disabled:opacity-100' : 'border border-line text-mute hover:text-ink'}`}
-              >
-                {c.emoji && <span>{c.emoji}</span>}
-                {c.name}
-                {!allowed && <Lock size={12} aria-hidden />}
-              </button>
-            )
-          })}
-        </div>
-        {canEdit && (
-          <button onClick={p.onDelete} aria-label="Delete task" className={iconBtn}>
-            <Trash2 size={18} />
-          </button>
-        )}
-        <button onClick={p.onClose} aria-label="Close" className={iconBtn}>
-          <X size={20} />
+  // keep the task's column chip in view, even when it's far right
+  useEffect(() => {
+    currentChip.current?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' })
+  }, [task.column_id])
+
+  const header = (
+    <div className="flex items-center gap-1">
+      <div role="group" aria-label="Column" className="no-scrollbar -mx-1 flex flex-1 gap-1.5 overflow-x-auto px-1 py-1">
+        {columns.map((c) => {
+          const current = c.id === task.column_id
+          if (!canEdit && !current) return null
+          const allowed = current || p.canMoveTo(c)
+          return (
+            <button
+              key={c.id}
+              ref={current ? currentChip : undefined}
+              disabled={!canEdit || !allowed}
+              aria-pressed={current}
+              onClick={(e) => {
+                if (current) return
+                const r = e.currentTarget.getBoundingClientRect()
+                p.onMove(c.id, { x: r.left + r.width / 2, y: r.top + r.height / 2 })
+              }}
+              title={allowed ? undefined : 'Locked by the master'}
+              className={`flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-sm font-semibold transition active:scale-95 disabled:opacity-50 ${current ? 'bg-primary text-on-primary disabled:opacity-100' : 'border border-line text-mute hover:text-ink'}`}
+            >
+              {c.emoji && <span>{c.emoji}</span>}
+              {c.name}
+              {!allowed && <Lock size={12} aria-hidden />}
+            </button>
+          )
+        })}
+      </div>
+      {canEdit && (
+        <button onClick={p.onDelete} aria-label="Delete task" className={iconBtn}>
+          <Trash2 size={18} />
         </button>
-      </div>
+      )}
+    </div>
+  )
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
-        {canEdit ? (
-          <Editable
-            value={task.title}
-            onSave={(title) => p.onUpdate({ title })}
-            rows={1}
-            maxLength={200}
-            aria-label="Task title"
-            className="mt-3 w-full resize-none bg-transparent text-[22px] leading-tight font-bold focus:outline-none"
-          />
-        ) : (
-          <h2 className="mt-3 text-[22px] leading-tight font-bold break-words">{task.title}</h2>
-        )}
-        <p className="mt-2 flex items-center gap-2 text-sm text-mute">
-          <Avatar member={author} size={20} />
-          Added by {author?.name ?? 'a former member'}, {ago(task.created_at)}
-        </p>
+  return (
+    <Sheet label={task.title} header={header} footer={<CommentBox members={members} onSend={p.onComment} />} onClose={p.onClose}>
+      {canEdit ? (
+        <Editable
+          value={task.title}
+          onSave={(title) => p.onUpdate({ title })}
+          rows={1}
+          maxLength={200}
+          aria-label="Task title"
+          className="w-full resize-none bg-transparent text-[22px] leading-tight font-bold focus:outline-none"
+        />
+      ) : (
+        <h2 className="text-[22px] leading-tight font-bold break-words">{task.title}</h2>
+      )}
+      <p className="mt-2 flex items-center gap-2 text-sm text-mute">
+        <Avatar member={author} size={20} />
+        Added by {author?.name ?? 'a former member'}, {ago(task.created_at)}
+      </p>
 
-        <Notes value={task.description} canEdit={canEdit} onSave={(description) => p.onUpdate({ description })} onUpload={p.onUpload} />
+      <Notes value={task.description} canEdit={canEdit} onSave={(description) => p.onUpdate({ description })} onUpload={p.onUpload} />
 
-        <h3 className="mt-8 text-sm font-semibold text-mute">Comments{comments.length > 0 && ` (${comments.length})`}</h3>
-        {comments.length === 0 && <p className="mt-2 text-sm text-mute">No comments yet. Type @ to mention someone.</p>}
-        <ul className="mt-3 grid gap-4">
-          {comments.map((c) => {
-            const who = member(c.author_id)
-            return (
-              <li key={c.id} className="group flex gap-3">
-                <Avatar member={who} size={30} />
-                <div className="min-w-0 flex-1">
-                  <p className="flex items-baseline gap-2 text-sm">
-                    <span className="font-semibold">{who?.name ?? 'Former member'}</span>
-                    <time dateTime={c.created_at} title={new Date(c.created_at).toLocaleString()} className="text-xs text-mute">
-                      {ago(c.created_at)}
-                    </time>
-                    {(c.author_id === me || p.isMaster) && (
-                      <button
-                        onClick={() => confirm('Delete this comment?') && p.onDeleteComment(c)}
-                        aria-label="Delete comment"
-                        className="ml-auto self-center text-mute opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100 max-sm:opacity-60"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
-                  </p>
-                  <p className="mt-0.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
-                    <Body text={c.body} members={members} me={me} />
-                  </p>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-        <div ref={end} />
-      </div>
-
-      <CommentBox members={members} onSend={p.onComment} />
+      <h3 className="mt-8 text-sm font-semibold text-mute">Comments{comments.length > 0 && ` (${comments.length})`}</h3>
+      {comments.length === 0 && <p className="mt-2 text-sm text-mute">No comments yet. Type @ to mention someone.</p>}
+      <ul className="mt-3 grid gap-4">
+        {comments.map((c) => {
+          const who = member(c.author_id)
+          return (
+            <li key={c.id} className={`group flex gap-3 ${initial.has(c.id) ? '' : 'pop'}`}>
+              <Avatar member={who} size={30} />
+              <div className="min-w-0 flex-1">
+                <p className="flex items-baseline gap-2 text-sm">
+                  <span className="font-semibold">{who?.name ?? 'Former member'}</span>
+                  <time dateTime={c.created_at} title={new Date(c.created_at).toLocaleString()} className="text-xs text-mute">
+                    {ago(c.created_at)}
+                  </time>
+                  {(c.author_id === me || p.isMaster) && (
+                    <button
+                      onClick={() => confirm('Delete this comment?') && p.onDeleteComment(c)}
+                      aria-label="Delete comment"
+                      className="ml-auto self-center text-mute opacity-0 group-hover:opacity-100 hover:text-danger focus-visible:opacity-100 max-sm:opacity-60"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </p>
+                <p className="mt-0.5 text-[15px] leading-relaxed break-words whitespace-pre-wrap">
+                  <Body text={c.body} members={members} me={me} />
+                </p>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
+      <div ref={end} />
     </Sheet>
   )
 }
-
 // Markdown details: rendered by default, tap to edit. Saves on blur and when the sheet closes.
 function Notes({ value, canEdit, onSave, onUpload }: { value: string; canEdit: boolean; onSave: (v: string) => void; onUpload: (f: File) => Promise<string> }) {
   const [editing, setEditing] = useState(false)
@@ -347,7 +353,7 @@ function CommentBox({ members, onSend }: { members: Member[]; onSend: (body: str
         e.preventDefault()
         send()
       }}
-      className="relative flex items-end gap-2 border-t border-line px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+      className="relative flex items-end gap-2 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
       {matches.length > 0 && (
         <ul role="listbox" aria-label="Mention someone" className="absolute right-4 bottom-full left-4 mb-2 overflow-hidden rounded-2xl border border-line bg-sheet py-1 shadow-xl">

@@ -1,13 +1,16 @@
-import { ChevronRight, Crown } from 'lucide-react'
+import { ChevronRight, Crown, Share, UserRound } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
-import { colorOf, errorText, go, me, savedName, supabase, toast } from './lib'
-import { btn, field, Logo, Splash } from './ui'
+import { AccountSheet, useAccount } from './Account'
+import { clearInstallPrompt, colorOf, errorText, go, installPrompt, me, savedName, supabase, toast } from './lib'
+import { btn, field, ghost, Logo, pill, Splash } from './ui'
 
 type Project = { id: string; name: string; owner_id: string; members: { count: number }[] }
 
 export function Home() {
   const [projects, setProjects] = useState<Project[]>()
   const [uid, setUid] = useState('')
+  const [account, setAccount] = useState(false)
+  const username = useAccount()
 
   useEffect(() => {
     me.then(setUid)
@@ -25,9 +28,12 @@ export function Home() {
       <header className="flex items-center gap-3">
         <Logo className="size-11" />
         <h1 className="font-display text-[28px] font-bold tracking-tight">midori</h1>
+        <button onClick={() => setAccount(true)} className={`${ghost} ml-auto`}>
+          <UserRound size={17} aria-hidden /> {username ?? 'Sign in'}
+        </button>
       </header>
       <p className="mt-5 max-w-[34ch] text-[17px] leading-relaxed text-mute">
-        Plan your game with friends. Make a project, share the link, and everyone's in. No accounts.
+        Plan your game with friends. Make a project, share the link, and everyone's in. No sign-up needed.
       </p>
 
       {projects.length > 0 && (
@@ -73,7 +79,53 @@ export function Home() {
         <h2 className="text-sm font-semibold text-mute">{projects.length ? 'New project' : 'Start your first project'}</h2>
         <CreateForm />
       </section>
+
+      <InstallCard />
+      {account && <AccountSheet onClose={() => setAccount(false)} />}
     </main>
+  )
+}
+
+// Installed, it opens full screen like an app. Android gets a real button; iOS only allows Share > Add to Home Screen.
+function InstallCard() {
+  const [prompt, setPrompt] = useState(installPrompt)
+  useEffect(() => {
+    const ready = () => setPrompt(installPrompt)
+    addEventListener('installable', ready)
+    return () => removeEventListener('installable', ready)
+  }, [])
+  const installed = matchMedia('(display-mode: standalone)').matches || 'standalone' in navigator
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
+  if (installed || (!prompt && !ios)) return null
+
+  return (
+    <section className="mt-10 flex items-center gap-4 rounded-2xl border-2 border-dashed border-line p-4">
+      <img src={`${import.meta.env.BASE_URL}apple-touch-icon.png`} alt="" className="size-12 rounded-xl" />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold">Put Midori on your home screen</p>
+        <p className="mt-0.5 text-sm text-mute">
+          {prompt ? (
+            'It opens full screen, like an app.'
+          ) : (
+            <>
+              Tap <Share size={14} className="inline align-[-2px]" aria-label="Share" /> then “Add to Home Screen”.
+            </>
+          )}
+        </p>
+      </div>
+      {prompt && (
+        <button
+          onClick={async () => {
+            await prompt.prompt()
+            clearInstallPrompt()
+            setPrompt(null)
+          }}
+          className={`${pill} h-9 px-4 text-sm`}
+        >
+          Install
+        </button>
+      )}
+    </section>
   )
 }
 

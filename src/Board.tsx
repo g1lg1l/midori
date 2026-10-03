@@ -1,15 +1,18 @@
-import { ChevronLeft, ChevronRight, Copy, Crown, ListChecks, Lock, MessageCircle, MoreHorizontal, Plus, RefreshCw, Trash2, UserPlus, X } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
+import { ChevronLeft, ChevronRight, Copy, Crown, ListChecks, Lock, MessageCircle, MoreHorizontal, Plus, RefreshCw, Trash2, UserPlus, UserRound, X } from 'lucide-react'
+import { Fragment, lazy, Suspense, useCallback, useEffect, useRef, useState, type DragEvent } from 'react'
+import { flushSync } from 'react-dom'
+import { AccountSheet, useAccount } from './Account'
 import {
   assignColors, colorOf, errorText, go, inviteUrl, supabase, toast, uploadImage,
   type Column, type Comment, type Member, type Task, type Workspace,
 } from './lib'
 import { between, checklist, firstImage, mentionedIds } from './text'
-import { Avatar, btn, danger, Editable, field, fieldBare, ghost, iconBtn, link, Logo, pill, Sheet, Splash, Toggle } from './ui'
+import { Avatar, btn, burst, danger, Editable, field, fieldBare, ghost, iconBtn, link, Logo, outline, pill, reducedMotion, Sheet, Splash, Toggle } from './ui'
 
 type Data = { workspace?: Workspace | null; members: Member[]; columns: Column[]; tasks: Task[]; comments: Comment[] }
 type Table = 'members' | 'columns' | 'tasks' | 'comments'
 type AnyRow = Record<string, unknown>
+type Point = { x: number; y: number }
 
 // markdown rendering only loads once a task is opened
 const TaskSheet = lazy(() => import('./TaskSheet').then((m) => ({ default: m.TaskSheet })))
@@ -21,10 +24,15 @@ export function Board({ id, me }: { id: string; me: string }) {
   const [data, setData] = useState<Data>({ members: [], columns: [], tasks: [], comments: [] })
   const [openTask, setOpenTask] = useState<string>()
   const [settings, setSettings] = useState(false)
+  const [account, setAccount] = useState(false)
   const [editColumn, setEditColumn] = useState<string>()
-  const [dragOver, setDragOver] = useState<string>()
+  const [dragging, setDragging] = useState<string>()
+  const [target, setTarget] = useState<{ col: string; index: number }>()
+  const [moving, setMoving] = useState<string>()
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set())
   const [active, setActive] = useState(0)
   const scroller = useRef<HTMLDivElement>(null)
+  const username = useAccount()
 
   // Rows are applied idempotently, so our own writes and their realtime echo can both land.
   const put = (table: Table, row: AnyRow) => {
@@ -35,6 +43,11 @@ export function Board({ id, me }: { id: string; me: string }) {
     setData((d) => ({ ...d, [table]: (d[table] as unknown as AnyRow[]).map((r) => (r.id === rowId ? { ...r, ...change } : r)) }))
   const drop = (table: Table, rowId: unknown) =>
     setData((d) => ({ ...d, [table]: (d[table] as unknown as AnyRow[]).filter((r) => r.id !== rowId) }))
+  // new cards pop in once
+  const markFresh = (taskId: string) => {
+    setFresh((s) => new Set(s).add(taskId))
+    setTimeout(() => setFresh((s) => new Set([...s].filter((x) => x !== taskId))), 600)
+  }
 
   const load = useCallback(async () => {
     const [w, m, c, t, cm] = await Promise.all([
@@ -55,7 +68,10 @@ export function Board({ id, me }: { id: string; me: string }) {
     const channel = supabase.channel(`project:${id}`)
     for (const table of ['members', 'columns', 'tasks', 'comments'] as const) {
       channel
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, (p) => put(table, p.new))
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table, filter }, (p) => {
+          put(table, p.new)
+          if (table === 'tasks') markFresh(p.new.id)
+        })
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table, filter }, (p) => put(table, p.new))
       // delete events can't be filtered; unknown ids are simply ignored
       if (table !== 'members') channel.on('postgres_changes', { event: 'DELETE', schema: 'public', table }, (p) => drop(table, p.old.id))
@@ -111,7 +127,11 @@ export function Board({ id, me }: { id: string; me: string }) {
       .select()
       .single()
     if (error) return fail(error)
-    put('tasks', row)
+    flushSync(() => {
+      put('tasks', row)
+      markFresh(row.id)
+    })
+    document.querySelector(`[data-task="${row.id}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }
 
   async function updateTask(taskId: string, change: Partial<Task>) {
@@ -120,12 +140,15 @@ export function Board({ id, me }: { id: string; me: string }) {
     if (error) fail(error)
   }
 
-  function moveTask(task: Task, columnId: string, index?: number) {
+  function moveTask(task: Task, columnId: string, index?: number, at?: Point) {
     const list = tasksIn(columnId).filter((t) => t.id !== task.id)
     const i = index ?? list.length
     updateTask(task.id, { column_id: columnId, position: between(list[i - 1]?.position, list[i]?.position) })
     const last = cols.at(-1)
-    if (last?.id === columnId && task.column_id !== columnId) toast(`${last.emoji || '🎉'} Nice one! "${task.title}" made it to ${last.name}`)
+    if (last?.id === columnId && task.column_id !== columnId) {
+      toast(`Nice one! "${task.title}" made it to ${last.name}`)
+      burst(at?.x ?? innerWidth / 2, at?.y ?? innerHeight / 2, last.emoji || '🎉')
+    }
   }
 
   async function deleteTask(task: Task) {
@@ -217,18 +240,52 @@ export function Board({ id, me }: { id: string; me: string }) {
     toast('Invite link copied. Send it to your team!')
   }
 
-  function onDrop(e: DragEvent<HTMLElement>, col: Column) {
-    e.preventDefault()
-    setDragOver(undefined)
-    const task = tasks.find((t) => t.id === e.dataTransfer.getData('text/plain'))
-    if (!task || !canEdit(task)) return
-    if (!canWrite(col)) return toast(`🔒 Only the master can move tasks into ${col.name}`)
-    const cards = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-task]')].filter((el) => el.dataset.task !== task.id)
-    const index = cards.findIndex((el) => {
+  // Where a dragged card would land among the other cards of the column under the pointer.
+  function dropIndex(e: DragEvent<HTMLElement>) {
+    const cards = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-task]')].filter((el) => el.dataset.task !== dragging)
+    const i = cards.findIndex((el) => {
       const r = el.getBoundingClientRect()
       return e.clientY < r.top + r.height / 2
     })
-    moveTask(task, col.id, index < 0 ? undefined : index)
+    return i < 0 ? cards.length : i
+  }
+
+  function onDragOver(e: DragEvent<HTMLElement>, col: Column) {
+    if (!dragging) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = canWrite(col) ? 'move' : 'none'
+    const index = canWrite(col) ? dropIndex(e) : -1
+    if (target?.col !== col.id || target.index !== index) setTarget({ col: col.id, index })
+  }
+
+  function onDrop(e: DragEvent<HTMLElement>, col: Column) {
+    e.preventDefault()
+    const task = tasks.find((t) => t.id === dragging)
+    const index = dropIndex(e)
+    const at = { x: e.clientX, y: e.clientY }
+    const settle = () => {
+      setDragging(undefined)
+      setTarget(undefined)
+    }
+    if (!task || !canEdit(task)) return settle()
+    if (!canWrite(col)) {
+      settle()
+      return toast(`🔒 Only the master can move tasks into ${col.name}`)
+    }
+    if (!('startViewTransition' in document) || reducedMotion()) {
+      settle()
+      return moveTask(task, col.id, index, at)
+    }
+    // the dropped card flies from its old spot to the new one (view-transition-name: moving-card)
+    flushSync(() => setMoving(task.id))
+    document
+      .startViewTransition(() =>
+        flushSync(() => {
+          settle()
+          moveTask(task, col.id, index, at)
+        }),
+      )
+      .finished.finally(() => setMoving(undefined))
   }
 
   function onScroll() {
@@ -246,11 +303,11 @@ export function Board({ id, me }: { id: string; me: string }) {
   return (
     <div className="flex h-dvh flex-col">
       <header className="flex shrink-0 items-center gap-3 px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 sm:px-6 sm:pt-5">
-        <button onClick={() => go({})} aria-label="Your projects" className="shrink-0 rounded-xl transition-transform hover:-rotate-6">
+        <button onClick={() => go({})} aria-label="Your projects" title="Your projects" className="shrink-0 rounded-xl transition hover:-rotate-6 active:scale-90">
           <Logo className="size-9" />
         </button>
         <h1 className="min-w-0 flex-1 truncate font-display text-[clamp(18px,4.6vw,26px)] font-bold tracking-tight">{workspace.name}</h1>
-        <button onClick={() => setSettings(true)} aria-label="Members and settings" className="flex shrink-0 items-center rounded-full">
+        <button onClick={() => setSettings(true)} aria-label="Members and settings" className="flex shrink-0 items-center rounded-full transition active:scale-95">
           <span className="flex -space-x-2 [&>*]:ring-2 [&>*]:ring-paper">
             {members.slice(0, 4).map((m) => (
               <Avatar key={m.user_id} member={m} size={30} />
@@ -270,7 +327,7 @@ export function Board({ id, me }: { id: string; me: string }) {
             key={c.id}
             onClick={() => jumpTo(i)}
             aria-current={i === active}
-            className={`h-8 shrink-0 rounded-full px-3 text-sm font-semibold transition-colors ${i === active ? 'bg-primary text-on-primary' : 'border border-line bg-sheet text-mute'}`}
+            className={`h-8 shrink-0 rounded-full px-3 text-sm font-semibold transition active:scale-95 ${i === active ? 'bg-primary text-on-primary' : 'border border-line bg-sheet text-mute'}`}
           >
             {c.emoji && <span className="mr-1">{c.emoji}</span>}
             {c.name}
@@ -279,31 +336,33 @@ export function Board({ id, me }: { id: string; me: string }) {
         ))}
       </nav>
 
+      {/* Columns scroll sideways here (scrollbar on the bottom edge on desktop) and each column's list scrolls on its own. */}
       <div
         ref={scroller}
         onScroll={onScroll}
-        className="no-scrollbar flex min-h-0 flex-1 snap-x snap-mandatory items-start gap-3 overflow-x-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:snap-none sm:px-6"
+        className="flex min-h-0 flex-1 snap-x snap-mandatory items-start gap-3 overflow-x-auto overscroll-x-contain px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))] max-sm:no-scrollbar sm:snap-none sm:px-6"
       >
         {cols.map((c) => {
           const list = tasksIn(c.id)
+          const others = list.filter((t) => t.id !== dragging)
+          const over = target?.col === c.id
+          const marker = over && target.index >= 0
           return (
             <section
               key={c.id}
               aria-label={c.name}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOver(c.id)
-              }}
-              onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setDragOver(undefined)}
+              onDragOver={(e) => onDragOver(e, c)}
+              onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && over && setTarget(undefined)}
               onDrop={(e) => onDrop(e, c)}
               style={{ background: `var(--c-${c.color})` }}
-              className={`flex max-h-full w-[86vw] max-w-sm shrink-0 snap-center flex-col rounded-[22px] transition-shadow sm:w-72 ${dragOver === c.id ? (canWrite(c) ? 'ring-2 ring-brand' : 'ring-2 ring-danger/60') : ''}`}
+              // ring-inset: drawn inside the column, so the scroller can't clip it
+              className={`flex max-h-full w-[86vw] max-w-sm shrink-0 snap-center flex-col rounded-[22px] ring-inset transition-shadow sm:w-72 ${over ? (canWrite(c) ? 'ring-2 ring-brand' : 'ring-2 ring-danger/60') : ''}`}
             >
               <div className="flex items-center gap-2 py-2 pr-1.5 pl-4">
                 {c.emoji && <span className="text-lg leading-none">{c.emoji}</span>}
                 <h2 className="truncate text-[15px] font-bold">{c.name}</h2>
                 <span className="rounded-full bg-sheet/70 px-2 text-xs font-semibold text-mute tabular-nums">{list.length}</span>
-                {c.locked && <Lock size={14} className="text-mute" aria-label="Locked: only the master changes tasks here" />}
+                {c.locked && <Lock size={14} className="shrink-0 text-mute" aria-label="Locked: only the master changes tasks here" />}
                 {isMaster ? (
                   <button onClick={() => setEditColumn(c.id)} aria-label={`Edit column ${c.name}`} className={`${iconBtn} ml-auto`}>
                     <MoreHorizontal size={18} />
@@ -312,19 +371,30 @@ export function Board({ id, me }: { id: string; me: string }) {
                   <span className="h-9" />
                 )}
               </div>
-              <div className="grid min-h-0 flex-1 content-start gap-2 overflow-y-auto px-2 pb-1">
-                {list.length === 0 && <p className="px-2 py-3 text-center text-sm text-mute">{canWrite(c) ? 'Nothing here yet' : 'Only the master adds tasks here'}</p>}
+              <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto overscroll-contain px-2 pt-1 pb-2">
+                {list.length === 0 && !marker && <p className="px-2 py-3 text-center text-sm text-mute">{canWrite(c) ? 'Nothing here yet' : 'Only the master adds tasks here'}</p>}
                 {list.map((t) => (
-                  <Card
-                    key={t.id}
-                    task={t}
-                    me={me}
-                    author={member(t.created_by)}
-                    comments={commentsOn(t.id)}
-                    draggable={canEdit(t)}
-                    onOpen={() => setOpenTask(t.id)}
-                  />
+                  <Fragment key={t.id}>
+                    {marker && others[target.index]?.id === t.id && <DropMarker />}
+                    <Card
+                      task={t}
+                      me={me}
+                      author={member(t.created_by)}
+                      comments={commentsOn(t.id)}
+                      draggable={canEdit(t)}
+                      dragging={dragging === t.id}
+                      moving={moving === t.id}
+                      fresh={fresh.has(t.id)}
+                      onOpen={() => setOpenTask(t.id)}
+                      onDragStart={() => setTimeout(() => setDragging(t.id))} // after the browser grabs the drag image
+                      onDragEnd={() => {
+                        setDragging(undefined)
+                        setTarget(undefined)
+                      }}
+                    />
+                  </Fragment>
                 ))}
+                {marker && target.index === others.length && <DropMarker />}
               </div>
               {canWrite(c) && <InlineAdd label="Add task" placeholder="What needs doing?" maxLength={200} onAdd={(title) => addTask(c.id, title)} />}
             </section>
@@ -339,36 +409,30 @@ export function Board({ id, me }: { id: string; me: string }) {
 
       {task && (
         <Suspense>
-        <TaskSheet
-          key={task.id}
-          task={task}
-          me={me}
-          columns={cols}
-          members={members}
-          comments={commentsOn(task.id).sort((a, b) => a.created_at.localeCompare(b.created_at))}
-          canEdit={canEdit(task)}
-          canMoveTo={canWrite}
-          isMaster={isMaster}
-          onClose={() => setOpenTask(undefined)}
-          onUpdate={(change) => updateTask(task.id, change)}
-          onMove={(colId) => moveTask(task, colId)}
-          onDelete={() => confirm('Delete this task and its comments?') && deleteTask(task)}
-          onComment={(body) => addComment(task, body)}
-          onDeleteComment={deleteComment}
-          onUpload={(file) => uploadImage(id, file)}
-        />
+          <TaskSheet
+            key={task.id}
+            task={task}
+            me={me}
+            columns={cols}
+            members={members}
+            comments={commentsOn(task.id).sort((a, b) => a.created_at.localeCompare(b.created_at))}
+            canEdit={canEdit(task)}
+            canMoveTo={canWrite}
+            isMaster={isMaster}
+            onClose={() => setOpenTask(undefined)}
+            onUpdate={(change) => updateTask(task.id, change)}
+            onMove={(colId, at) => moveTask(task, colId, undefined, at)}
+            onDelete={() => confirm('Delete this task and its comments?') && deleteTask(task)}
+            onComment={(body) => addComment(task, body)}
+            onDeleteComment={deleteComment}
+            onUpload={(file) => uploadImage(id, file)}
+          />
         </Suspense>
       )}
 
       {column && (
-        <Sheet label={`Edit column ${column.name}`} onClose={() => setEditColumn(undefined)}>
-          <div className="flex items-center justify-between px-5 pt-4">
-            <h2 className="font-semibold">Edit column</h2>
-            <button onClick={() => setEditColumn(undefined)} aria-label="Close" className={iconBtn}>
-              <X size={20} />
-            </button>
-          </div>
-          <div className="grid gap-6 overflow-y-auto px-5 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        <Sheet label={`Edit column ${column.name}`} header={<h2 className="font-semibold">Edit column</h2>} onClose={() => setEditColumn(undefined)}>
+          <div className="grid gap-6">
             <div className="flex gap-2">
               <label className="grid w-20 gap-1.5">
                 <span className="text-sm font-medium">Emoji</span>
@@ -385,7 +449,7 @@ export function Board({ id, me }: { id: string; me: string }) {
                   key={e}
                   onClick={() => updateColumn(column, { emoji: column.emoji === e ? '' : e })}
                   aria-pressed={column.emoji === e}
-                  className={`grid size-9 place-items-center rounded-xl text-lg transition-transform hover:scale-110 ${column.emoji === e ? 'bg-raised ring-2 ring-brand' : ''}`}
+                  className={`grid size-9 place-items-center rounded-xl text-lg transition hover:scale-115 active:scale-90 ${column.emoji === e ? 'bg-raised ring-2 ring-brand' : ''}`}
                 >
                   {e}
                 </button>
@@ -402,7 +466,7 @@ export function Board({ id, me }: { id: string; me: string }) {
                     aria-label={color}
                     onClick={() => updateColumn(column, { color })}
                     style={{ background: `var(--c-${color})` }}
-                    className={`size-9 rounded-full border border-line transition-transform hover:scale-110 ${column.color === color ? 'ring-2 ring-brand ring-offset-2 ring-offset-sheet' : ''}`}
+                    className={`size-9 rounded-full border border-line transition hover:scale-110 active:scale-90 ${column.color === color ? 'ring-2 ring-brand ring-offset-2 ring-offset-sheet' : ''}`}
                   />
                 ))}
               </div>
@@ -429,14 +493,8 @@ export function Board({ id, me }: { id: string; me: string }) {
       )}
 
       {settings && (
-        <Sheet label="Project settings" onClose={() => setSettings(false)}>
-          <div className="flex items-center justify-between px-5 pt-4">
-            <h2 className="font-semibold">Project</h2>
-            <button onClick={() => setSettings(false)} aria-label="Close" className={iconBtn}>
-              <X size={20} />
-            </button>
-          </div>
-          <div className="grid gap-7 overflow-y-auto px-5 pt-3 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+        <Sheet label="Project settings" header={<h2 className="font-semibold">Project</h2>} onClose={() => setSettings(false)}>
+          <div className="grid gap-7">
             {isMaster && (
               <label className="grid gap-1.5">
                 <span className="text-sm font-medium">Project name</span>
@@ -444,9 +502,25 @@ export function Board({ id, me }: { id: string; me: string }) {
               </label>
             )}
             <label className="grid gap-1.5">
-              <span className="text-sm font-medium">Your name</span>
+              <span className="text-sm font-medium">Your name in this project</span>
               <Editable value={member(me)?.name ?? ''} onSave={rename} maxLength={40} aria-label="Your name" className={field} />
             </label>
+
+            <div className="grid gap-2 rounded-2xl bg-raised p-4">
+              <span className="flex items-center gap-2 text-sm font-medium">
+                <UserRound size={16} aria-hidden /> {username ? `Signed in as ${username}` : 'Guest on this device'}
+              </span>
+              <p className="text-sm text-mute">
+                {username
+                  ? 'Sign in with your username on any device to open this project.'
+                  : isMaster
+                    ? 'Save an account so you can run this project from your other devices, and keep it if this browser gets cleared.'
+                    : 'Save an account to open your projects on other devices.'}
+              </p>
+              <button onClick={() => setAccount(true)} className={`${outline} h-9 justify-self-start bg-sheet text-sm`}>
+                {username ? 'Manage account' : 'Save account'}
+              </button>
+            </div>
 
             <div className="grid gap-1.5">
               <span className="text-sm font-medium">Invite link</span>
@@ -512,26 +586,46 @@ export function Board({ id, me }: { id: string; me: string }) {
           </div>
         </Sheet>
       )}
+
+      {account && <AccountSheet onClose={() => setAccount(false)} />}
     </div>
   )
 }
 
-function Card({ task, me, author, comments, draggable, onOpen }: { task: Task; me: string; author?: Member; comments: Comment[]; draggable: boolean; onOpen: () => void }) {
+const DropMarker = () => <div aria-hidden className="pop mx-1 h-1 shrink-0 rounded-full bg-brand" />
+
+function Card(p: {
+  task: Task
+  me: string
+  author?: Member
+  comments: Comment[]
+  draggable: boolean
+  dragging: boolean
+  moving: boolean
+  fresh: boolean
+  onOpen: () => void
+  onDragStart: () => void
+  onDragEnd: () => void
+}) {
+  const { task, author, comments } = p
   const cover = firstImage(task.description)
   const { done, total } = checklist(task.description)
-  const mentioned = comments.some((c) => c.mentions.includes(me))
+  const mentioned = comments.some((c) => c.mentions.includes(p.me))
   return (
     <button
       data-task={task.id}
-      draggable={draggable}
+      draggable={p.draggable}
       onDragStart={(e) => {
         e.dataTransfer.setData('text/plain', task.id)
         e.dataTransfer.effectAllowed = 'move'
+        p.onDragStart()
       }}
-      onClick={onOpen}
-      className="relative w-full overflow-hidden rounded-2xl border border-line/70 bg-sheet text-left shadow-[0_1px_0_var(--line)] transition-transform hover:-translate-y-0.5 active:translate-y-0"
+      onDragEnd={p.onDragEnd}
+      onClick={p.onOpen}
+      style={{ viewTransitionName: p.moving ? 'moving-card' : undefined }}
+      className={`relative w-full shrink-0 overflow-hidden rounded-2xl border border-line/70 bg-sheet text-left shadow-[0_1px_0_var(--line)] transition hover:border-mute/40 hover:shadow-[0_6px_16px_-8px_rgb(0_0_0/0.3)] focus-visible:outline-offset-[-2px] active:scale-[0.98] ${p.dragging ? 'opacity-40' : ''} ${p.fresh ? 'pop' : ''}`}
     >
-      {cover && <img src={cover} alt="" loading="lazy" className="h-28 w-full object-cover" />}
+      {cover && <img src={cover} alt="" loading="lazy" draggable={false} className="h-28 w-full object-cover" />}
       <span className="block py-3 pr-3 pl-5">
         <span aria-hidden className="absolute bottom-3 left-2 w-1 rounded-full" style={{ top: cover ? '7.75rem' : '0.75rem', background: author ? colorOf(author.user_id) : 'var(--line)' }} />
         <span className="block text-[15px] leading-snug font-semibold break-words">{task.title}</span>
@@ -582,7 +676,7 @@ function InlineAdd({ label, placeholder, maxLength, onAdd }: { label: string; pl
 
   return (
     <form
-      className="m-2 grid gap-2"
+      className="pop m-2 grid gap-2"
       onSubmit={(e) => {
         e.preventDefault()
         submit()
