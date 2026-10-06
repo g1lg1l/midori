@@ -548,6 +548,33 @@ export function Board({ id, me }: { id: string; me: string }) {
             </div>
 
             {isMaster && (
+              <div className="grid gap-1.5">
+                <span className="text-sm font-medium">Report key</span>
+                <div className="flex gap-2">
+                  <input readOnly value={workspace.report_key} aria-label="Report key" onFocus={(e) => e.currentTarget.select()} className={`${field} min-w-0 text-mute`} />
+                  <button
+                    onClick={() => navigator.clipboard.writeText(workspace.report_key).then(() => toast('Report key copied'))}
+                    className={`${pill} px-4`}
+                  >
+                    <Copy size={16} aria-hidden /> Copy
+                  </button>
+                </div>
+                <p className="text-sm text-mute">
+                  Apps (a game's crash reports) send cards to the Debug column with this key, through the send_report call.
+                </p>
+                <button
+                  onClick={() =>
+                    confirm('Make a new report key? Apps using the current one will stop reporting.') &&
+                    updateWorkspace({ report_key: crypto.randomUUID().replaceAll('-', '') })
+                  }
+                  className={link}
+                >
+                  <RefreshCw size={15} aria-hidden /> Reset key
+                </button>
+              </div>
+            )}
+
+            {isMaster && (
               <Toggle
                 label="Members can edit everyone's tasks"
                 hint="When off, members only edit and move the tasks they added. Locked columns stay yours either way."

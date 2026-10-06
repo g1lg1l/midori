@@ -193,6 +193,7 @@ export type Database = {
           members_edit_all: boolean
           name: string
           owner_id: string
+          report_key: string
         }
         Insert: {
           created_at?: string
@@ -201,6 +202,7 @@ export type Database = {
           members_edit_all?: boolean
           name: string
           owner_id: string
+          report_key?: string
         }
         Update: {
           created_at?: string
@@ -209,6 +211,7 @@ export type Database = {
           members_edit_all?: boolean
           name?: string
           owner_id?: string
+          report_key?: string
         }
         Relationships: []
       }
@@ -220,6 +223,10 @@ export type Database = {
       can_write_task: {
         Args: { author: string; col: string; ws: string }
         Returns: boolean
+      }
+      send_report: {
+        Args: { body: string; key: string; title: string }
+        Returns: string
       }
       create_workspace: {
         Args: { member_name: string; workspace_name: string }

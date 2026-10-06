@@ -67,6 +67,19 @@ try {
   assert.equal(ok(await friend.storage.from('images').remove([path])).length, 0) // only the master deletes
   assert.equal(ok(await master.storage.from('images').remove([path])).length, 1)
 
+  // reports: anyone with the project's report key adds a card to Debug; the same title comments
+  const reporter = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_PUBLISHABLE_KEY, { auth: { persistSession: false } })
+  const { report_key } = ok(await master.from('workspaces').select('report_key').eq('id', ws).single())
+  await denied(reporter.rpc('send_report', { key: 'nope', title: 'x', body: 'x' }))
+  const card = ok(await reporter.rpc('send_report', { key: report_key, title: 'Crash 0.21', body: 'log' }))
+  assert.equal(ok(await reporter.rpc('send_report', { key: report_key, title: 'Crash 0.21', body: 'again' })), card)
+  const debug = ok(await friend.from('columns').select().eq('workspace_id', ws).eq('name', 'Debug').single())
+  const reported = ok(await friend.from('tasks').select().eq('id', card).single())
+  assert.equal(reported.column_id, debug.id)
+  assert.equal(reported.created_by, masterId)
+  assert.equal(await rows(friend.from('comments').select().eq('task_id', card)), 1)
+  assert.equal(await rows(stranger.from('workspaces').select('report_key').eq('id', ws)), 0)
+
   console.log('RLS check passed')
 } finally {
   ok(await master.from('workspaces').delete().eq('id', ws))
