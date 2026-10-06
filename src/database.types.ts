@@ -144,6 +144,29 @@ export type Database = {
           },
         ]
       }
+      report_hits: {
+        Row: {
+          at: string
+          workspace_id: string
+        }
+        Insert: {
+          at?: string
+          workspace_id: string
+        }
+        Update: {
+          at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "report_hits_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           column_id: string
@@ -224,10 +247,6 @@ export type Database = {
         Args: { author: string; col: string; ws: string }
         Returns: boolean
       }
-      send_report: {
-        Args: { body: string; key: string; title: string }
-        Returns: string
-      }
       create_workspace: {
         Args: { member_name: string; workspace_name: string }
         Returns: string
@@ -245,6 +264,10 @@ export type Database = {
       is_member: { Args: { ws: string }; Returns: boolean }
       join_workspace: {
         Args: { code: string; member_name: string }
+        Returns: string
+      }
+      send_report: {
+        Args: { body: string; key: string; title: string }
         Returns: string
       }
     }
